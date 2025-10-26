@@ -10,64 +10,24 @@ import "./ManagerPage.css";
 const ManagerPage = () => {
   const navigate = useNavigate();
   
-  // Hardcoded manager info - NO BACKEND NEEDED
-  const [managerInfo] = useState({
-    first_name: "Sarah",
-    last_name: "Johnson",
-    job_title: "Manager",
-    department: "giftshop",
-    email: "sarah.johnson@themepark.com"
-  });
+  // TODO: Get this from login/auth context later
+  // For now, you can change this to test different managers
+  const managerEmail = "giftshop.manager@themepark.com";
   
+  // All state - NO hardcoded data
+  const [managerInfo, setManagerInfo] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
-  
-  // Hardcoded dashboard data
-  const [dashboardData] = useState({
+  const [dashboardData, setDashboardData] = useState({
     staff: [],
-    inventory: [
-      { item_id: 1, item_name: "Theme Park T-Shirt", store_name: "Main Gift Shop", quantity: 45, price: 24.99, type: "Apparel" },
-      { item_id: 2, item_name: "Plush Mascot", store_name: "Main Gift Shop", quantity: 15, price: 34.99, type: "Toys" },
-      { item_id: 3, item_name: "Water Bottle", store_name: "West Gift Shop", quantity: 78, price: 12.99, type: "Accessories" },
-      { item_id: 4, item_name: "Keychain Set", store_name: "Main Gift Shop", quantity: 5, price: 8.99, type: "Accessories" },
-      { item_id: 5, item_name: "Baseball Cap", store_name: "East Gift Shop", quantity: 32, price: 22.00, type: "Apparel" },
-      { item_id: 6, item_name: "Souvenir Mug", store_name: "Main Gift Shop", quantity: 67, price: 15.99, type: "Drinkware" },
-    ],
-    sales: { today: 2847.50, week: 18290.75, month: 74382.20 }
+    inventory: [],
+    sales: { today: 0, week: 0, month: 0 }
   });
-  
-  const [staffDetails] = useState([
-    { employee_id: 1, first_name: "Emily", last_name: "Chen", job_title: "Sales Associate", stores_assigned: 2, store_names: "Main Gift Shop, West Gift Shop" },
-    { employee_id: 2, first_name: "Michael", last_name: "Brown", job_title: "Cashier", stores_assigned: 1, store_names: "Main Gift Shop" },
-    { employee_id: 3, first_name: "Jessica", last_name: "Davis", job_title: "Stock Clerk", stores_assigned: 3, store_names: "Main Gift Shop, West Gift Shop, East Gift Shop" },
-    { employee_id: 4, first_name: "David", last_name: "Wilson", job_title: "Sales Associate", stores_assigned: 1, store_names: "East Gift Shop" },
-    { employee_id: 5, first_name: "Amanda", last_name: "Taylor", job_title: "Supervisor", stores_assigned: 2, store_names: "Main Gift Shop, West Gift Shop" },
-    { employee_id: 6, first_name: "Ryan", last_name: "Martinez", job_title: "Cashier", stores_assigned: 1, store_names: "West Gift Shop" },
-    { employee_id: 7, first_name: "Sophie", last_name: "Anderson", job_title: "Sales Associate", stores_assigned: 2, store_names: "East Gift Shop, Main Gift Shop" },
-  ]);
-  
-  const [recentTransactions] = useState([
-    { store_order_id: 1001, order_date: "2025-10-22", store_name: "Main Gift Shop", total_amount: 89.97, item_count: 3 },
-    { store_order_id: 1002, order_date: "2025-10-22", store_name: "West Gift Shop", total_amount: 124.50, item_count: 5 },
-    { store_order_id: 1003, order_date: "2025-10-23", store_name: "Main Gift Shop", total_amount: 45.98, item_count: 2 },
-    { store_order_id: 1004, order_date: "2025-10-23", store_name: "East Gift Shop", total_amount: 67.95, item_count: 4 },
-    { store_order_id: 1005, order_date: "2025-10-23", store_name: "Main Gift Shop", total_amount: 156.89, item_count: 7 },
-    { store_order_id: 1006, order_date: "2025-10-23", store_name: "West Gift Shop", total_amount: 78.45, item_count: 3 },
-  ]);
-  
-  const [lowStock] = useState([
-    { name: "Keychain Set", store_name: "Main Gift Shop", quantity: 5 },
-    { name: "Plush Mascot", store_name: "Main Gift Shop", quantity: 15 },
-  ]);
-  
-  const [topItems] = useState([
-    { name: "Theme Park T-Shirt", total_sold: 342, revenue: 8544.58 },
-    { name: "Plush Mascot", total_sold: 189, revenue: 6608.11 },
-    { name: "Water Bottle", total_sold: 267, revenue: 3468.33 },
-    { name: "Baseball Cap", total_sold: 156, revenue: 3432.00 },
-    { name: "Keychain Set", total_sold: 423, revenue: 3802.77 },
-  ]);
-  
-  const [loading] = useState(false);
+  const [staffDetails, setStaffDetails] = useState([]);
+  const [recentTransactions, setRecentTransactions] = useState([]);
+  const [lowStock, setLowStock] = useState([]);
+  const [topItems, setTopItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [staffSearchQuery, setStaffSearchQuery] = useState("");
   
   // Modal states
@@ -76,6 +36,93 @@ const ManagerPage = () => {
   const [showReportModal, setShowReportModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [reportType, setReportType] = useState("");
+
+  const API_BASE = "http://localhost:5000"; // to match the server port
+
+  // Fetch manager info on component mount
+  useEffect(() => {
+    fetchManagerInfo();
+  }, []);
+
+  // Fetch all dashboard data when manager info is loaded
+  useEffect(() => {
+    if (managerInfo && managerInfo.department) {
+      fetchAllData();
+    }
+  }, [managerInfo]);
+
+  const fetchManagerInfo = async () => {
+  try {
+    console.log("Fetching manager info for:", managerEmail);
+    console.log("API URL:", `${API_BASE}/manager-info/${managerEmail}`);
+    
+    const res = await fetch(`${API_BASE}/manager-info/${managerEmail}`);
+    console.log("Response status:", res.status);
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error("Error response:", errorText);
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+    
+    const data = await res.json();
+    console.log("Manager data received:", data);
+    
+    if (data.error) {
+      setError(data.error);
+      setLoading(false);
+      return;
+    }
+    
+    setManagerInfo(data);
+    setLoading(false);
+  } catch (err) {
+    console.error("Error fetching manager info:", err);
+    setError(`Failed to connect to server: ${err.message}`);
+    setLoading(false);
+  }
+};
+  const fetchAllData = async () => {
+    if (!managerInfo) return;
+    
+    setLoading(true);
+    const dept = managerInfo.department;
+    
+    try {
+      // Fetch all data in parallel
+      const [dashRes, staffRes, transRes, stockRes, topRes] = await Promise.all([
+        fetch(`${API_BASE}/manager/${dept}`),
+        fetch(`${API_BASE}/manager/${dept}/staff-details`),
+        fetch(`${API_BASE}/manager/${dept}/recent-transactions`),
+        fetch(`${API_BASE}/manager/${dept}/low-stock`),
+        fetch(`${API_BASE}/manager/${dept}/top-items`)
+      ]);
+
+      // Check if all requests succeeded
+      if (!dashRes.ok || !staffRes.ok || !transRes.ok || !stockRes.ok || !topRes.ok) {
+        throw new Error('One or more API requests failed');
+      }
+
+      const dashData = await dashRes.json();
+      const staffData = await staffRes.json();
+      const transData = await transRes.json();
+      const stockData = await stockRes.json();
+      const topData = await topRes.json();
+
+      // Update all state with database data
+      setDashboardData(dashData);
+      setStaffDetails(staffData);
+      setRecentTransactions(transData);
+      setLowStock(stockData);
+      setTopItems(topData);
+      setError(null);
+    } catch (err) {
+      console.error("Error fetching dashboard data:", err);
+      setError(`Failed to load dashboard data: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getDepartmentName = () => {
     if (!managerInfo) return "";
@@ -112,7 +159,16 @@ const ManagerPage = () => {
 
   const handleDeleteItem = async (itemId) => {
     if (!window.confirm("Are you sure you want to delete this item?")) return;
-    alert("Delete functionality - will be connected to backend later");
+    
+    try {
+      // TODO: Implement delete API endpoint
+      alert("Delete functionality - will be connected to backend API");
+      // After successful delete, refresh the data
+      fetchAllData();
+    } catch (err) {
+      console.error("Error deleting item:", err);
+      alert(`Failed to delete: ${err.message}`);
+    }
   };
 
   const handleGenerateReport = (type) => {
@@ -120,11 +176,65 @@ const ManagerPage = () => {
     setShowReportModal(true);
   };
 
-  if (loading) {
+  // Loading state
+  if (loading && !managerInfo) {
     return (
       <div className="manager-layout">
         <div className="loading-container">
           <p>Loading manager information...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error && !managerInfo) {
+    return (
+      <div className="manager-layout">
+        <div className="loading-container">
+          <div style={{ textAlign: "center" }}>
+            <h2 style={{ color: "#dc2626", marginBottom: "1rem" }}>Error Loading Manager Data</h2>
+            <p style={{ marginBottom: "0.5rem", color: "#2d3748" }}>{error}</p>
+            <p style={{ fontSize: "0.9rem", color: "#66bb6a", marginTop: "1rem" }}>
+              Troubleshooting:
+            </p>
+            <ul style={{ fontSize: "0.875rem", color: "#5a6c57", textAlign: "left", maxWidth: "400px", margin: "0.5rem auto" }}>
+              <li>Make sure backend server is running on http://localhost:5000</li>
+              <li>Check that the database is running</li>
+              <li>Verify manager exists in database with email: {managerEmail}</li>
+            </ul>
+            <button 
+              onClick={() => navigate("/")}
+              className="add-button"
+              style={{ marginTop: "1.5rem" }}
+            >
+              Return Home
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // No manager found
+  if (!managerInfo) {
+    return (
+      <div className="manager-layout">
+        <div className="loading-container">
+          <div style={{ textAlign: "center" }}>
+            <h2 style={{ color: "#2e7d32", marginBottom: "1rem" }}>Manager Not Found</h2>
+            <p style={{ marginBottom: "0.5rem" }}>No manager found with email: {managerEmail}</p>
+            <p style={{ fontSize: "0.875rem", color: "#66bb6a", marginTop: "1rem" }}>
+              Please add a manager to the database or check the email address.
+            </p>
+            <button 
+              onClick={() => navigate("/")}
+              className="add-button"
+              style={{ marginTop: "1rem" }}
+            >
+              Return Home
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -150,17 +260,17 @@ const ManagerPage = () => {
               <div className="card-grid">
                 <DashboardCard 
                   title="Today's Revenue" 
-                  value={formatCurrency(dashboardData.sales.today)} 
+                  value={formatCurrency(dashboardData.sales?.today || 0)} 
                   badge="Today"
                 />
                 <DashboardCard 
                   title="Weekly Revenue" 
-                  value={formatCurrency(dashboardData.sales.week)} 
+                  value={formatCurrency(dashboardData.sales?.week || 0)} 
                   badge="This Week"
                 />
                 <DashboardCard 
                   title="Monthly Revenue" 
-                  value={formatCurrency(dashboardData.sales.month)} 
+                  value={formatCurrency(dashboardData.sales?.month || 0)} 
                   badge="This Month"
                 />
                 <DashboardCard 
@@ -201,7 +311,7 @@ const ManagerPage = () => {
                 </div>
               </div>
 
-              {/* Top Items / Recent Activity */}
+              {/* Top Items / Staff Overview */}
               <div className="two-column-grid">
                 {!isMaintenance && topItems.length > 0 && (
                   <div className="section-card">
@@ -225,24 +335,28 @@ const ManagerPage = () => {
 
                 <div className="section-card">
                   <h3>Staff Overview</h3>
-                  <div className="items-list">
-                    {staffDetails.slice(0, 5).map((staff, idx) => (
-                      <div key={idx} className="item-row">
-                        <div className="item-info">
-                          <div className="staff-avatar">
-                            {staff.first_name?.[0]}{staff.last_name?.[0]}
+                  {staffDetails.length > 0 ? (
+                    <div className="items-list">
+                      {staffDetails.slice(0, 5).map((staff, idx) => (
+                        <div key={idx} className="item-row">
+                          <div className="item-info">
+                            <div className="staff-avatar">
+                              {staff.first_name?.[0]}{staff.last_name?.[0]}
+                            </div>
+                            <div>
+                              <p className="item-name">{staff.first_name} {staff.last_name}</p>
+                              <p className="item-meta">{staff.job_title}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="item-name">{staff.first_name} {staff.last_name}</p>
-                            <p className="item-meta">{staff.job_title}</p>
-                          </div>
+                          <span className="item-meta">
+                            {isMaintenance ? `${staff.active_jobs || 0} jobs` : `${staff.stores_assigned || 0} stores`}
+                          </span>
                         </div>
-                        <span className="item-meta">
-                          {isMaintenance ? `${staff.active_jobs || 0} jobs` : `${staff.stores_assigned || 0} stores`}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ color: "#66bb6a", fontSize: "0.9rem" }}>No staff members found for this department.</p>
+                  )}
                 </div>
               </div>
 
@@ -293,46 +407,54 @@ const ManagerPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {staffDetails
-                  .filter(staff => 
-                    `${staff.first_name} ${staff.last_name}`.toLowerCase().includes(staffSearchQuery.toLowerCase()) ||
-                    staff.job_title?.toLowerCase().includes(staffSearchQuery.toLowerCase())
-                  )
-                  .map((staff, idx) => (
-                  <tr key={idx}>
-                    <td>
-                      <div className="staff-cell">
-                        <div className="staff-avatar-small">
-                          {staff.first_name?.[0]}{staff.last_name?.[0]}
+                {staffDetails.length > 0 ? (
+                  staffDetails
+                    .filter(staff => 
+                      `${staff.first_name} ${staff.last_name}`.toLowerCase().includes(staffSearchQuery.toLowerCase()) ||
+                      staff.job_title?.toLowerCase().includes(staffSearchQuery.toLowerCase())
+                    )
+                    .map((staff, idx) => (
+                    <tr key={idx}>
+                      <td>
+                        <div className="staff-cell">
+                          <div className="staff-avatar-small">
+                            {staff.first_name?.[0]}{staff.last_name?.[0]}
+                          </div>
+                          {staff.first_name} {staff.last_name}
                         </div>
-                        {staff.first_name} {staff.last_name}
-                      </div>
-                    </td>
-                    <td>{staff.job_title}</td>
-                    <td>
-                      <span className="badge">
-                        {isMaintenance ? `${staff.active_jobs || 0} jobs` : `${staff.stores_assigned || 0} stores`}
-                      </span>
-                    </td>
-                    <td className="details-cell">{staff.store_names || staff.job_statuses || "N/A"}</td>
-                    <td>
-                      <div className="action-buttons">
-                        <button 
-                          className="action-btn edit-btn"
-                          onClick={() => handleEditItem(staff)}
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          className="action-btn delete-btn"
-                          onClick={() => handleDeleteItem(staff.employee_id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
+                      </td>
+                      <td>{staff.job_title}</td>
+                      <td>
+                        <span className="badge">
+                          {isMaintenance ? `${staff.active_jobs || 0} jobs` : `${staff.stores_assigned || 0} stores`}
+                        </span>
+                      </td>
+                      <td className="details-cell">{staff.store_names || staff.job_statuses || "N/A"}</td>
+                      <td>
+                        <div className="action-buttons">
+                          <button 
+                            className="action-btn edit-btn"
+                            onClick={() => handleEditItem(staff)}
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            className="action-btn delete-btn"
+                            onClick={() => handleDeleteItem(staff.employee_id)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="5" style={{ textAlign: "center", padding: "2rem", color: "#66bb6a" }}>
+                      No staff members found
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </section>
@@ -346,25 +468,31 @@ const ManagerPage = () => {
                 + Add Product
               </button>
             </div>
-            <EditableTable 
-              data={dashboardData.inventory.map(item => ({
-                id: item.item_id,
-                name: item.item_name,
-                store: item.store_name,
-                quantity: item.quantity,
-                price: item.price,
-                type: item.type
-              }))} 
-              searchable={true}
-              onEdit={handleEditItem}
-              onDelete={handleDeleteItem}
-            />
+            {dashboardData.inventory && dashboardData.inventory.length > 0 ? (
+              <EditableTable 
+                data={dashboardData.inventory.map(item => ({
+                  id: item.item_id,
+                  name: item.item_name,
+                  store: item.store_name,
+                  quantity: item.quantity,
+                  price: item.price,
+                  type: item.type
+                }))} 
+                searchable={true}
+                onEdit={handleEditItem}
+                onDelete={handleDeleteItem}
+              />
+            ) : (
+              <div style={{ padding: "3rem", textAlign: "center", color: "#66bb6a" }}>
+                No inventory items found
+              </div>
+            )}
           </section>
         )}
 
         {activeTab === "transactions" && (
           <section className="transactions-section scrollable">
-            <div className="section-header mb-8">
+            <div className="section-header">
               <h2>{isMaintenance ? "Maintenance Jobs" : "Transaction History"}</h2>
               {isMaintenance && (
                 <button className="add-button" onClick={handleAddItem}>
@@ -375,7 +503,10 @@ const ManagerPage = () => {
 
             {!isMaintenance && (
               <div className="transaction-cards">
-                <DashboardCard title="Total Revenue" value={formatCurrency(dashboardData.sales.month)} />
+                <DashboardCard 
+                  title="Total Revenue" 
+                  value={formatCurrency(dashboardData.sales?.month || 0)} 
+                />
                 <DashboardCard 
                   title="Total Transactions" 
                   value={recentTransactions.length} 
@@ -390,16 +521,22 @@ const ManagerPage = () => {
               </div>
             )}
 
-            <TransactionTable 
-              data={recentTransactions.map(trans => ({
-                id: trans.store_order_id,
-                date: formatDate(trans.order_date),
-                customer: trans.store_name,
-                total: parseFloat(trans.total_amount || 0),
-                status: `${trans.item_count} items`
-              }))} 
-              searchable={true} 
-            />
+            {recentTransactions.length > 0 ? (
+              <TransactionTable 
+                data={recentTransactions.map(trans => ({
+                  id: trans.store_order_id,
+                  date: formatDate(trans.order_date),
+                  customer: trans.store_name,
+                  total: parseFloat(trans.total_amount || 0),
+                  status: `${trans.item_count} items`
+                }))} 
+                searchable={true} 
+              />
+            ) : (
+              <div style={{ padding: "3rem", textAlign: "center", color: "#66bb6a", background: "white", borderRadius: "0 0 20px 20px" }}>
+                No transactions found
+              </div>
+            )}
           </section>
         )}
       </main>
@@ -410,7 +547,7 @@ const ManagerPage = () => {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h2>{showAddModal ? "Add New Item" : "Edit Item"}</h2>
             <p style={{ color: "#66bb6a", marginBottom: "1rem" }}>
-              Data entry form will go here - connect to backend later
+              Data entry form will be connected to backend API
             </p>
             <button 
               className="add-button"
@@ -427,7 +564,7 @@ const ManagerPage = () => {
           <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
             <h2>{reportType.charAt(0).toUpperCase() + reportType.slice(1)} Report</h2>
             <p style={{ color: "#66bb6a", marginBottom: "1rem" }}>
-              Report data from multiple tables will display here
+              Report data from database tables will display here
             </p>
             <button 
               className="add-button"
