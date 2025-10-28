@@ -1,3 +1,10 @@
+import express from 'express';
+import cors from 'cors';
+import env from "dotenv";
+import mysql from 'mysql'
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+
 import express from "express";
 import mysql from "mysql2/promise";
 import cors from "cors";
@@ -9,9 +16,25 @@ console.log("Loaded PORT:", process.env.PORT);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+   console.log('Connected to the MySQL server.');
+ });
+
+//Middlewares
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+function makeToken(customerRow) {
+  return jwt.sign(
+    {
+      customer_id: customerRow.customer_id,
+      email: customerRow.email,
+    },
+    process.env.JWT_SECRET || "dev-secret",
+    { expiresIn: "7d" }
+  );
+}
+
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST || "cosc3380-themepark.mysql.database.azure.com",
@@ -366,19 +389,41 @@ app.post("/manager/assign-employee", async (req, res) => {
   }
 });
 
-// Remove employee from store
-app.delete("/manager/assign-employee", async (req, res) => {
+// Get sales employees by department
+app.get("/manager/:department/sales-employees", async (req, res) => {
   try {
-    const { employee_id, store_id } = req.body;
+    const dept = req.params.department;
+    let jobTitle;
     
-    await pool.query(`
-      DELETE FROM employee_store_job 
-      WHERE employee_id = ? AND store_id = ?
-    `, [employee_id, store_id]);
+    if (dept === 'giftshop') {
+      jobTitle = 'Sales Employee';
+    } else if (dept === 'foodanddrinks') {
+      jobTitle = 'Concession Employee';
+    } else {
+      return res.json([]);
+    }
     
-    res.json({ success: true, message: "Employee removed from store" });
+    const [rows] = await pool.query(`
+      SELECT 
+        e.employee_id,
+        e.first_name,
+        e.last_name,
+        e.email,
+        e.phone,
+        e.job_title,
+        COUNT(DISTINCT esj.store_id) as stores_assigned,
+        GROUP_CONCAT(DISTINCT s.name SEPARATOR ', ') as store_names
+      FROM employee e
+      LEFT JOIN employee_store_job esj ON e.employee_id = esj.employee_id
+      LEFT JOIN store s ON esj.store_id = s.store_id
+      WHERE e.job_title = ?
+      GROUP BY e.employee_id, e.first_name, e.last_name, e.email, e.phone, e.job_title
+      ORDER BY e.last_name, e.first_name
+    `, [jobTitle]);
+    
+    res.json(rows);
   } catch (err) {
-    console.error("Error removing employee:", err);
+    console.error("Error fetching sales employees:", err);
     res.status(500).json({ error: "DB error", message: err.message });
   }
 });
