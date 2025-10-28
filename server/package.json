@@ -1,23 +1,25 @@
 {
-  "name": "themepark-backend",
+  "name": "server",
   "version": "1.0.0",
   "type": "module",
-  "description": "Theme Park Management System Backend",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["express", "mysql", "ThemePark"],
-  "author": "",
+  "author": "team12",
   "license": "ISC",
+  "description": "",
   "dependencies": {
-    "express": "^4.18.2",
+    "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "mysql2": "^3.6.5"
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "multer": "^2.0.2",
+    "mysql": "^2.18.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.1.10"
   }
 }

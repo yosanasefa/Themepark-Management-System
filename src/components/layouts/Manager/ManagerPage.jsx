@@ -81,13 +81,7 @@ const Sidebar = ({ activeTab, setActiveTab, managerInfo, onLogout }) => {
     </aside>
   );
 };
-const handleLogout = () => {
-  // Clear user data from localStorage
-  localStorage.removeItem('user');
-  
-  // Redirect to login page
-  navigate('/login');
-};
+
 // Dashboard Card Component
 const DashboardCard = ({ title, value, badge, alert }) => {
   return (
@@ -610,7 +604,7 @@ const fetchAllData = async () => {
             </div>
             
             <div style={{ padding: "3rem", textAlign: "center", background: "white", borderRadius: "0 0 20px 20px" }}>
-              <p style={{ fontSize: "1.5rem", marginBottom: "1rem" }}>📅</p>
+              <p style={{ fontSize: "1.5rem", marginBottom: "1rem" }}></p>
               <p style={{ fontSize: "1.125rem", color: "#afd69b", marginBottom: "1rem", fontWeight: "600" }}>
                 Schedule Management
               </p>
@@ -651,5 +645,11 @@ const fetchAllData = async () => {
     </div>
   );
 };
-
+const handleLogout = () => {
+  // Clear user data from localStorage
+  localStorage.removeItem('user');
+  
+  // Redirect to login page
+  navigate('/login');
+};
 export default ManagerPage;

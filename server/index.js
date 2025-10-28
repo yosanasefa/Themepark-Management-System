@@ -5,24 +5,44 @@ import mysql from 'mysql'
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
-import express from "express";
-import mysql from "mysql2/promise";
-import cors from "cors";
-import dotenv from "dotenv";
-
-dotenv.config();
-console.log("Loaded PORT:", process.env.PORT);
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = 3001;
+env.config();
+
+
+//connect to local database
+ const db = mysql.createConnection({
+   host: process.env.DB_HOST,
+   port: process.env.DB_PORT,
+   user: process.env.DB_USER,
+   password: process.env.DB_PASSWORD,
+   database: process.env.DB_NAME,
+    ssl:{rejectUnauthorized: true}
+ }); 
+ db.connect((err) => {
+   if (err) return console.error(err.message);
 
    console.log('Connected to the MySQL server.');
  });
 
 //Middlewares
-// Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static('uploads'));// serve uploaded images
+
+// ===== Multer Configuration FOR PHOTO UPLOAD =====
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/ride_photos'); // folder to save files
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now();
+    cb(null, uniqueSuffix + path.extname(file.originalname)); // e.g. 16981983019.jpg
+  }
+});
+const upload = multer({ storage });
 
 function makeToken(customerRow) {
   return jwt.sign(
@@ -36,48 +56,34 @@ function makeToken(customerRow) {
 }
 
 
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || "cosc3380-themepark.mysql.database.azure.com",
-  user: process.env.DB_USER || "team12",
-  password: process.env.DB_PASS || "Cosc3380thempark",
-  database: process.env.DB_NAME || "Themepark",
-  port: process.env.DB_PORT || 3306,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  ssl: {
-    rejectUnauthorized: true
-  }
-});
+//ROUTES
 
-// Test connection
-pool.getConnection()
-  .then(conn => {
-    console.log("✅ MySQL Connected");
-    conn.release();
-  })
-  .catch(err => {
-    console.error("❌ MySQL Connection Error:", err.message);
-  });
+//CUSTOMER ROUTES ADDED BY DAVID
 
-// Get manager info by email
-app.get("/manager-info/:email", async (req, res) => {
+//SIGNUP ROUTE
+app.post("/api/customer/signup", async (req, res) => {
   try {
-    const email = req.params.email;
-    const [rows] = await pool.query(
-      `SELECT e.employee_id, e.first_name, e.last_name, e.job_title, e.email,
-        CASE
-          WHEN e.job_title LIKE '%gift%' THEN 'giftshop'
-          WHEN e.job_title LIKE '%food%' OR e.job_title LIKE '%drink%' THEN 'foodanddrinks'
-          ELSE 'giftshop'
-        END AS department
-      FROM employee e
-      WHERE e.email = ?`,
-      [email]
-    );
-    
-    if (rows.length === 0) {
-      return res.status(404).json({ error: "Manager not found" });
+    const {
+      first_name,
+      last_name,
+      gender,
+      email,
+      password,
+      dob,
+      phone,
+    } = req.body;
+
+    // basic validation using DB NOT NULL rules
+    if (
+      !first_name ||
+      !last_name ||
+      !gender ||
+      !email ||
+      !password ||
+      !dob ||
+      !phone
+    ) {
+      return res.status(400).json({ error: "Missing required fields" });
     }
     
     res.json(rows[0]);
@@ -387,142 +393,89 @@ app.post("/manager/assign-employee", async (req, res) => {
     console.error("Error assigning employee:", err);
     res.status(500).json({ error: "DB error", message: err.message });
   }
-});
 
-// Get sales employees by department
-app.get("/manager/:department/sales-employees", async (req, res) => {
-  try {
-    const dept = req.params.department;
-    let jobTitle;
-    
-    if (dept === 'giftshop') {
-      jobTitle = 'Sales Employee';
-    } else if (dept === 'foodanddrinks') {
-      jobTitle = 'Concession Employee';
-    } else {
-      return res.json([]);
+  // decoded: { customer_id, email, iat, exp }
+  req.customer_id = decoded.customer_id;
+  next();
+}
+
+app.get("/api/customer/me", requireCustomerAuth, (req, res) => {
+  const sql = `
+    SELECT customer_id, first_name, last_name, gender, email, dob, phone
+    FROM customer
+    WHERE customer_id = ?
+    LIMIT 1
+  `;
+
+  db.query(sql, [req.customer_id], (err, rows) => {
+    if (err) {
+      console.error("ME query error:", err);
+      return res.status(500).json({ error: "Database error" });
     }
-    
-    const [rows] = await pool.query(`
-      SELECT 
-        e.employee_id,
-        e.first_name,
-        e.last_name,
-        e.email,
-        e.phone,
-        e.job_title,
-        COUNT(DISTINCT esj.store_id) as stores_assigned,
-        GROUP_CONCAT(DISTINCT s.name SEPARATOR ', ') as store_names
-      FROM employee e
-      LEFT JOIN employee_store_job esj ON e.employee_id = esj.employee_id
-      LEFT JOIN store s ON esj.store_id = s.store_id
-      WHERE e.job_title = ?
-      GROUP BY e.employee_id, e.first_name, e.last_name, e.email, e.phone, e.job_title
-      ORDER BY e.last_name, e.first_name
-    `, [jobTitle]);
-    
-    res.json(rows);
-  } catch (err) {
-    console.error("Error fetching sales employees:", err);
-    res.status(500).json({ error: "DB error", message: err.message });
-  }
-});
 
-// Get employee schedule
-app.get("/manager/:department/schedules", async (req, res) => {
-  try {
-    const dept = req.params.department;
-    const storeType = dept === 'giftshop' ? 'merchandise' : 'food/drink';
-    const { start_date, end_date } = req.query;
-    
-    let query = `
-      SELECT 
-        es.schedule_id,
-        es.work_date,
-        es.shift_start,
-        es.shift_end,
-        es.status,
-        e.employee_id,
-        e.first_name,
-        e.last_name,
-        s.store_id,
-        s.name as store_name
-      FROM employee_schedule es
-      JOIN employee e ON es.employee_id = e.employee_id
-      JOIN store s ON es.store_id = s.store_id
-      WHERE s.type = ?
-    `;
-    
-    const params = [storeType];
-    
-    if (start_date && end_date) {
-      query += ` AND es.work_date BETWEEN ? AND ?`;
-      params.push(start_date, end_date);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Customer not found" });
     }
-    
-    query += ` ORDER BY es.work_date, es.shift_start`;
-    
-    const [rows] = await pool.query(query, params);
-    res.json(rows);
-  } catch (err) {
-    console.error("Error fetching schedules:", err);
-    res.status(500).json({ error: "DB error", message: err.message });
-  }
+
+    const row = rows[0];
+
+    return res.json({
+      customer: {
+        customer_id: row.customer_id,
+        first_name: row.first_name,
+        last_name: row.last_name,
+        gender: row.gender,
+        email: row.email,
+        dob: row.dob,
+        phone: row.phone,
+      },
+    });
+  });
 });
 
-// Create/Update schedule
-app.post("/manager/schedule", async (req, res) => {
-  try {
-    const { employee_id, store_id, work_date, shift_start, shift_end } = req.body;
-    
-    await pool.query(`
-      INSERT INTO employee_schedule (employee_id, store_id, work_date, shift_start, shift_end)
-      VALUES (?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE 
-        shift_start = VALUES(shift_start),
-        shift_end = VALUES(shift_end)
-    `, [employee_id, store_id, work_date, shift_start, shift_end]);
-    
-    res.json({ success: true, message: "Schedule created successfully" });
-  } catch (err) {
-    console.error("Error creating schedule:", err);
-    res.status(500).json({ error: "DB error", message: err.message });
-  }
-});
 
-// Delete schedule
-app.delete("/manager/schedule/:schedule_id", async (req, res) => {
-  try {
-    const { schedule_id } = req.params;
-    
-    await pool.query(`
-      DELETE FROM employee_schedule WHERE schedule_id = ?
-    `, [schedule_id]);
-    
-    res.json({ success: true, message: "Schedule deleted successfully" });
-  } catch (err) {
-    console.error("Error deleting schedule:", err);
-    res.status(500).json({ error: "DB error", message: err.message });
-  }
-});
+//Get all the rides
+app.get('rides', async (req, res) => {
+    try{
+        const response = null;
+        res.json({success: true})
 
-// Add/Update merchandise to store inventory
-app.post("/manager/inventory", async (req, res) => {
-  try {
-    const { store_id, item_id, stock_quantity } = req.body;
-    
-    await pool.query(`
-      INSERT INTO store_inventory (store_id, item_id, stock_quantity)
-      VALUES (?, ?, ?)
-      ON DUPLICATE KEY UPDATE stock_quantity = ?
-    `, [store_id, item_id, stock_quantity, stock_quantity]);
-    
-    res.json({ success: true, message: "Inventory updated successfully" });
-  } catch (err) {
-    console.error("Error updating inventory:", err);
-    res.status(500).json({ error: "DB error", message: err.message });
-  }
-});
+    }catch(error){
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching rides',
+            error: error.message
+        })
+    }
+})
+
+ //Get all the employees under admin
+ app.get('/employees', (req, res) => {
+    try{
+        res.json({success: true})
+
+    }catch(error){
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching rides',
+            error: error.message
+        })
+    }
+})
+
+//Get all the maintenance schedule
+app.get('/maintenances', (req, res) => {
+    try{
+        res.json({success: true})
+
+    }catch(error){
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching rides',
+            error: error.message
+        })
+    }
+})
 
 // Remove merchandise from store
 app.delete("/manager/inventory", async (req, res) => {
